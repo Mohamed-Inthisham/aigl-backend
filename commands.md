@@ -1,0 +1,15 @@
+requests
+firebase_admin
+tensorflow
+Pillow 
+apscheduler  
+flask 
+flask_cors
+scikit-learn
+deepface 
+mtcnn
+pandas 
+opencv-python
+seaborn
+matplotlib
+pymongo
