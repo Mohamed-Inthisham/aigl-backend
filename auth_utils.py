@@ -5,6 +5,7 @@ import os
 import datetime
 import logging
 import yaml
+from werkzeug.utils import secure_filename
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -19,8 +20,11 @@ try:
     client = MongoClient(os.environ["MONGO_DB_URI"])
     db = client['Elearning']
     users_collection = db['users']
-    print("Connected to MongoDB")
+    students_collection = db['students']
+    companies_collection = db['companies']
+    logger.info("Connected to MongoDB and collections initialized in auth_utils.py")
 except Exception as e:
+    logger.error(f"Error connecting to MongoDB or initializing collections in auth_utils.py: {e}")
     print(e)
 
 def hash_password(password):
@@ -33,62 +37,147 @@ def verify_password(password, password_hash):
     """Verifies a password against its hash."""
     return bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
 
-def register_user():
-    """Handles user registration logic, establishing DB connection within function."""
-    data = request.get_json()
+def register_student_user(app_config): # Accept app_config
+    """Handles student user registration logic with image upload."""
+    # --- Get form data ---
+    email = request.form.get('email')
+    password = request.form.get('password')
+    firstname = request.form.get('firstname')
+    lastname = request.form.get('lastname')
+    phone = request.form.get('phone')
+    dob = request.form.get('dob')
+    address = request.form.get('address')
+    image_file = request.files.get('image')
 
-    if not data:
-        logger.warning("Registration failed: No JSON data provided")
-        return jsonify({"msg": "No data provided"}), 400
+    if not all([email, password, firstname, lastname]):
+        logger.warning(f"Student registration failed: Missing required data for email {email}")
+        return jsonify({"msg": "Missing required registration data"}), 400
 
-    username = data.get('username')
-    password = data.get('password')
-    email = data.get('email')
-    role = data.get('role')
+    image_filepath = None
 
-    # --- Input Validation ---
-    if not username or not password or not role or role not in ['student', 'company'] or not email:
-        logger.warning(f"Registration failed: Missing or invalid data for user {username}")
-        return jsonify({"msg": "Missing or invalid registration data"}), 400
+    if image_file:
+        try:
+            upload_folder = app_config['UPLOAD_IMAGE_FOLDER'] # Use app_config
+            filename = secure_filename(image_file.filename)
+            image_filepath = os.path.join(upload_folder, filename)
+            image_file.save(image_filepath)
+            image_filepath = "/store/images/" + filename
+            logger.info(f"Image saved to: {image_filepath}")
+        except Exception as e:
+            logger.error(f"Error saving image for student {email}: {e}")
+            return jsonify({"msg": "Error saving image"}), 500
 
-    mongo_client = client # Use the client connected outside
+
     try:
-        # Check for existing users
-        if users_collection.find_one({'username': username}):
-            logger.info(f"Registration failed: Username {username} already exists")
-            return jsonify({"msg": "Username already exists"}), 400
         if users_collection.find_one({'email': email}):
-            logger.info(f"Registration failed: Email {email} already exists")
+            logger.info(f"Student registration failed: Email {email} already exists")
             return jsonify({"msg": "Email already exists"}), 400
 
-        # --- Hash the password ---
         password_hash = hash_password(password)
-
-        # --- Store user in MongoDB ---
         user_data = {
-            "username": username,
             "email": email,
             "password_hash": password_hash,
-            "role": role,
+            "role": 'student',
             "created_at": datetime.datetime.utcnow()
         }
+        user_result = users_collection.insert_one(user_data)
+        user_id = user_result.inserted_id
 
-        result = users_collection.insert_one(user_data)
+        student_data = {
+            "user_id": user_id,
+            "firstname": firstname,
+            "lastname": lastname,
+            "email": email,
+            "phone": phone,
+            "dob": dob,
+            "address": address,
+            "image": image_filepath
+        }
+        student_result = students_collection.insert_one(student_data)
 
-        if result.acknowledged:
-            logger.info(f"User {username} registered successfully with ID: {result.inserted_id}")
-            return jsonify({"msg": "User registered successfully", "user_id": str(result.inserted_id)}), 201
+        if user_result.acknowledged and student_result.acknowledged:
+            logger.info(f"Student with email {email} registered successfully")
+            return jsonify({"msg": "Student registered successfully"}), 201
         else:
-            logger.error(f"Registration failed: Insert operation not acknowledged for user {username}")
-            return jsonify({"msg": "Failed to register user - database did not acknowledge operation"}), 500
-
+            logger.error(f"Student registration failed: Insert operation not fully acknowledged for email {email}")
+            return jsonify({"msg": "Failed to register student"}), 500
 
     except errors.PyMongoError as e:
-        logger.error(f"MongoDB error during user registration: {e}")
-        return jsonify({"msg": f"Database error: {str(e)}"}), 500
+        logger.error(f"MongoDB error during student registration: {e}")
+        return jsonify({"msg": f"Database error during student registration: {str(e)}"}), 500
     except Exception as e:
-        logger.error(f"Unexpected error during user registration: {e}")
-        return jsonify({"msg": "An unexpected error occurred"}), 500
-    # finally: # No need to close client here as it's connected outside and intended to be reused.
-    #     if mongo_client:
-    #         mongo_client.close() # Avoid closing the client that is intended to be reused
+        logger.error(f"Unexpected error during student registration: {e}")
+        return jsonify({"msg": "An unexpected error occurred during student registration"}), 500
+
+def register_company_user(app_config): # Accept app_config
+    """Handles company user registration logic with image upload."""
+    data = request.form
+    if not data:
+        logger.warning("Company registration failed: No form data provided")
+        return jsonify({"msg": "No data provided"}), 400
+
+    email = request.form.get('email')
+    password = request.form.get('password')
+    company_name = request.form.get('company_name')
+    phone = request.form.get('phone')
+    br_number = request.form.get('br_number')
+    about = request.form.get('about')
+    image_file = request.files.get('image')
+
+    if not all([email, password, company_name]):
+        logger.warning(f"Company registration failed: Missing required data for email {email}")
+        return jsonify({"msg": "Missing required registration data"}), 400
+
+    image_filepath = None
+
+    if image_file:
+        try:
+            upload_folder = app_config['UPLOAD_IMAGE_FOLDER'] # Use app_config
+            filename = secure_filename(image_file.filename)
+            image_filepath = os.path.join(upload_folder, filename)
+            image_file.save(image_filepath)
+            image_filepath = "/store/images/" + filename
+            logger.info(f"Image saved to: {image_filepath}")
+        except Exception as e:
+            logger.error(f"Error saving image for company {email}: {e}")
+            return jsonify({"msg": "Error saving image"}), 500
+
+    try:
+        if users_collection.find_one({'email': email}):
+            logger.info(f"Company registration failed: Email {email} already exists")
+            return jsonify({"msg": "Email already exists"}), 400
+
+        password_hash = hash_password(password)
+        user_data = {
+            "email": email,
+            "password_hash": password_hash,
+            "role": 'company',
+            "created_at": datetime.datetime.utcnow()
+        }
+        user_result = users_collection.insert_one(user_data)
+        user_id = user_result.inserted_id
+
+        company_data = {
+            "user_id": user_id,
+            "company_name": company_name,
+            "email": email,
+            "phone": phone,
+            "br_number": br_number,
+            "image": image_filepath,
+            "about": about
+        }
+        company_result = companies_collection.insert_one(company_data)
+
+        if user_result.acknowledged and company_result.acknowledged:
+            logger.info(f"Company with email {email} registered successfully")
+            return jsonify({"msg": "Company registered successfully"}), 201
+        else:
+            logger.error(f"Company registration failed: Insert operation not fully acknowledged for email {email}")
+            return jsonify({"msg": "Failed to register company"}), 500
+
+    except errors.PyMongoError as e:
+        logger.error(f"MongoDB error during company registration: {e}")
+        return jsonify({"msg": f"Database error during company registration: {str(e)}"}), 500
+    except Exception as e:
+        logger.error(f"Unexpected error during company registration: {e}")
+        return jsonify({"msg": "An unexpected error occurred during company registration"}), 500
