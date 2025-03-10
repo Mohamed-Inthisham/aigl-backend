@@ -5,6 +5,7 @@ import os
 import logging
 import yaml
 from werkzeug.utils import secure_filename
+from flask_cors import CORS  # Import Flask-CORS
 
 # Import our updated auth_utils module
 from auth_utils import register_student_user, register_company_user, verify_password, users_collection, client
@@ -14,6 +15,9 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+CORS(app, origins="http://localhost:5173")  # Enable CORS for requests from http://localhost:3000 (for development)
+# If you want to allow all origins for development (less secure, but convenient):
+# CORS(app)
 
 # --- Configure Upload Folder ---
 app.config['UPLOAD_IMAGE_FOLDER'] = 'store/images'
