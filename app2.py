@@ -5,23 +5,20 @@ import os
 import logging
 import yaml
 from werkzeug.utils import secure_filename
-from flask_cors import CORS  # Import Flask-CORS
+from flask_cors import CORS
 
 # Import our updated auth_utils module
-from auth_utils import register_student_user, register_company_user, verify_password, users_collection, client
+from auth_utils import register_student_user, register_company_user, verify_password, users_collection, client, students_collection, companies_collection
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app, origins="http://localhost:5173")  # Enable CORS for requests from http://localhost:3000 (for development)
-# If you want to allow all origins for development (less secure, but convenient):
-# CORS(app)
+CORS(app, origins="http://localhost:5173")
 
 # --- Configure Upload Folder ---
 app.config['UPLOAD_IMAGE_FOLDER'] = 'store/images'
-# Ensure upload folder exists
 os.makedirs(app.config['UPLOAD_IMAGE_FOLDER'], exist_ok=True)
 
 # Set a strong JWT secret key
@@ -33,13 +30,14 @@ jwt = JWTManager(app)
 
 # --- Endpoints ---
 
-@app.route('/register/student', methods=['POST']) # Route for student registration
+@app.route('/register/student', methods=['POST'])
 def register_student():
-    return register_student_user(app.config) # Pass app.config here
+    return register_student_user(app.config)
 
-@app.route('/register/company', methods=['POST']) # Route for company registration
+@app.route('/register/company', methods=['POST'])
 def register_company():
-    return register_company_user(app.config) # Pass app.config here
+    return register_company_user(app.config)
+
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -55,9 +53,8 @@ def login():
         logger.warning(f"Login failed: Missing email or password for email {email}")
         return jsonify({"msg": "Missing email or password"}), 400
 
-    mongo_client = client # Use client from auth_utils
+    mongo_client = client
     try:
-        # Check connection - client is already initialized in auth_utils
         client.admin.command('ping')
 
         user = users_collection.find_one({'email': email})
@@ -67,7 +64,28 @@ def login():
             return jsonify({"msg": "Invalid email or password"}), 401
 
         if verify_password(password, user['password_hash']):
-            access_token = create_access_token(identity=email, additional_claims={'role': user['role']})
+            user_role = user['role']
+
+            profile_data = None
+
+            if user_role == 'student':
+                student_profile = students_collection.find_one({'email': email})
+                if student_profile:
+                    profile_data = student_profile
+            elif user_role == 'company':
+                company_profile = companies_collection.find_one({'email': email})
+                if company_profile:
+                    profile_data = company_profile
+
+            profile_image_url = profile_data.get('image') if profile_data else None
+
+            access_token = create_access_token(
+                identity=email,
+                additional_claims={
+                    'role': user_role,
+                    'profile_image_url': profile_image_url  # <-- Include profile_image_url claim
+                }
+            )
             logger.info(f"User with email {email} logged in successfully")
             return jsonify(access_token=access_token), 200
         else:
@@ -80,9 +98,6 @@ def login():
     except Exception as e:
         logger.error(f"Error during login: {e}")
         return jsonify({"msg": "Login failed due to a server error"}), 500
-    # finally: # No need to close client here as it's initialized and intended to be reused in auth_utils
-    #     if mongo_client:
-    #         mongo_client.close() # Avoid closing the client that is intended to be reused
 
 
 @app.route('/protected', methods=['GET'])
@@ -100,20 +115,16 @@ def protected():
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    """Endpoint to check if the application and database are healthy"""
-    mongo_client = client # Use client from auth_utils
+    mongo_client = client
     try:
-        # Check database connection - client is already initialized in auth_utils
         client.admin.command('ping')
         return jsonify({"status": "healthy", "database": "connected"}), 200
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return jsonify({"status": "unhealthy", "database": "disconnected", "error": str(e)}), 500
-    # finally: # No need to close client here as it's initialized and intended to be reused in auth_utils
-    #     if mongo_client:
-    #         mongo_client.close() # Avoid closing the client that is intended to be reused
 
-@app.route('/store/images/<filename>') # Route to serve images
+
+@app.route('/store/images/<filename>')
 def serve_images(filename):
     return send_from_directory(app.config['UPLOAD_IMAGE_FOLDER'], filename)
 
