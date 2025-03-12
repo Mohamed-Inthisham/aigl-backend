@@ -24,12 +24,11 @@ def create_content_logic(course_id):
     if not data:
         return jsonify({"msg": "No data provided"}), 400
 
-    required_fields = ['lesson_name', 'link']
-    if not all(field in data for field in required_fields):
-        return jsonify({"msg": "Missing required fields: lesson_name, link"}), 400
+    if not isinstance(data, list): # Expecting a list of contents now
+        return jsonify({"msg": "Expected a list of course contents in the request body"}), 400
 
-    lesson_name = data.get('lesson_name')
-    link = data.get('link')
+    created_content_ids = [] # To store IDs of successfully created contents
+    failed_contents = [] # To store info about contents that failed to create
 
     try:
         course_object_id = ObjectId(course_id)
@@ -37,23 +36,52 @@ def create_content_logic(course_id):
         if not course:
             return jsonify({"msg": "Course not found or you are not authorized"}), 404
 
+        for content_item in data: # Iterate through the list of content items
+            lesson_name = content_item.get('lesson_name')
+            link = content_item.get('link')
 
-        content_data = {
-            'course_id': course_object_id, # Store ObjectId as course_id
-            'lesson_name': lesson_name,
-            'link': link
-        }
-        result = contents_collection.insert_one(content_data)
-        logger.info(f"Content created with id: {result.inserted_id} for course id: {course_id}")
-        return jsonify({"msg": "Course content created successfully", "content_id": str(result.inserted_id)}), 201
+            if not lesson_name or not link: # Validate each content item
+                failed_contents.append({"item": content_item, "error": "Missing required fields: lesson_name, link"})
+                continue # Skip to the next content item if validation fails
+
+            content_data = {
+                'course_id': course_object_id, # Store ObjectId as course_id
+                'lesson_name': lesson_name,
+                'link': link
+            }
+            try:
+                result = contents_collection.insert_one(content_data)
+                created_content_ids.append(str(result.inserted_id))
+                logger.info(f"Content created with id: {result.inserted_id} for course id: {course_id}")
+            except errors.PyMongoError as db_error:
+                failed_contents.append({"item": content_item, "error": f"Database error: {str(db_error)}"})
+                logger.error(f"Database error creating course content for course id: {course_id}: {db_error}")
+            except Exception as e:
+                failed_contents.append({"item": content_item, "error": f"Error: {str(e)}"})
+                logger.error(f"Error creating course content for course id: {course_id}: {e}")
+
+
+        if failed_contents:
+            return jsonify({
+                "msg": "Some course contents created with errors",
+                "created_content_ids": created_content_ids,
+                "failed_contents": failed_contents
+            }), 207 # 207 Multi-Status - some operations succeeded, some failed
+        else:
+            return jsonify({
+                "msg": "All course contents created successfully",
+                "created_content_ids": created_content_ids
+            }), 201
+
+
     except errors.InvalidId:
         return jsonify({"msg": "Invalid course ID format"}), 400
     except errors.PyMongoError as e:
-        logger.error(f"Database error creating course content: {e}")
-        return jsonify({"msg": f"Could not create course content due to database error: {str(e)}"}), 500
+        logger.error(f"Database error creating course contents: {e}")
+        return jsonify({"msg": f"Could not create course contents due to database error: {str(e)}"}), 500
     except Exception as e:
-        logger.error(f"Error creating course content: {e}")
-        return jsonify({"msg": "Error creating course content"}), 500
+        logger.error(f"Error creating course contents: {e}")
+        return jsonify({"msg": "Error creating course contents"}), 500
 
 
 def get_content_logic(content_id):
