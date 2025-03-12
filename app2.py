@@ -1,14 +1,20 @@
 from flask import Flask, request, jsonify, send_from_directory
 from flask_jwt_extended import create_access_token, jwt_required, JWTManager, get_jwt_identity, get_jwt
-from pymongo import MongoClient, errors
+from pymongo import errors
 import os
 import logging
 import yaml
 from werkzeug.utils import secure_filename
 from flask_cors import CORS
+from bson.objectid import ObjectId
+from datetime import datetime
 
 # Import our updated auth_utils module
 from auth_utils import register_student_user, register_company_user, verify_password, users_collection, client, students_collection, companies_collection
+
+# Import course logic functions from courses.py
+from courses import create_course_logic, get_course_logic, update_course_logic, delete_course_logic, get_company_courses_logic, get_all_courses_logic
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -17,9 +23,11 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app, origins="http://localhost:5173")
 
-# --- Configure Upload Folder ---
-app.config['UPLOAD_IMAGE_FOLDER'] = 'store/images'
+# --- Configure Upload Folders ---
+app.config['UPLOAD_IMAGE_FOLDER'] = 'store/images' # Existing profile image folder
+app.config['UPLOAD_COURSE_IMAGE_FOLDER'] = r'C:\Users\moham\OneDrive\Desktop\SkillNet\AIGL\store\images\course' # Course image folder
 os.makedirs(app.config['UPLOAD_IMAGE_FOLDER'], exist_ok=True)
+os.makedirs(app.config['UPLOAD_COURSE_IMAGE_FOLDER'], exist_ok=True) # Create course image folder if not exists
 
 # Set a strong JWT secret key
 app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY", "your-jwt-secret-key")
@@ -27,6 +35,7 @@ if app.config["JWT_SECRET_KEY"] == "your-jwt-secret-key":
     logger.warning("Using default JWT secret key. This is insecure for production.")
 
 jwt = JWTManager(app)
+
 
 # --- Endpoints ---
 
@@ -83,7 +92,7 @@ def login():
                 identity=email,
                 additional_claims={
                     'role': user_role,
-                    'profile_image_url': profile_image_url  # <-- Include profile_image_url claim
+                    'profile_image_url': profile_image_url
                 }
             )
             logger.info(f"User with email {email} logged in successfully")
@@ -127,6 +136,40 @@ def health_check():
 @app.route('/store/images/<filename>')
 def serve_images(filename):
     return send_from_directory(app.config['UPLOAD_IMAGE_FOLDER'], filename)
+
+@app.route('/store/course_images/<filename>')
+def serve_course_images(filename):
+    return send_from_directory(app.config['UPLOAD_COURSE_IMAGE_FOLDER'], filename) # Serve course images
+
+
+# --- Course Routes (Calling logic from courses.py) ---
+
+@app.route('/courses', methods=['POST'])
+@jwt_required()
+def create_course():
+    return create_course_logic() # Call logic function from courses.py
+
+@app.route('/courses/<course_id>', methods=['GET'])
+def get_course(course_id):
+    return get_course_logic(course_id) # Call logic function from courses.py
+
+@app.route('/courses/<course_id>', methods=['PUT'])
+@jwt_required()
+def update_course(course_id):
+    return update_course_logic(course_id) # Call logic function from courses.py
+
+@app.route('/courses/<course_id>', methods=['DELETE'])
+@jwt_required()
+def delete_course(course_id):
+    return delete_course_logic(course_id) # Call logic function from courses.py
+
+@app.route('/companies/<company_name>/courses', methods=['GET'])
+def get_company_courses(company_name):
+    return get_company_courses_logic(company_name) # Call logic function from courses.py
+
+@app.route('/courses', methods=['GET']) # Get all courses
+def get_all_courses():
+    return get_all_courses_logic() # Call logic function from courses.py
 
 
 if __name__ == '__main__':
