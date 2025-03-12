@@ -10,10 +10,13 @@ from bson.objectid import ObjectId
 from datetime import datetime
 
 # Import our updated auth_utils module
-from auth_utils import register_student_user, register_company_user, verify_password, users_collection, client, students_collection, companies_collection
+from auth_utils import register_student_user, register_company_user, verify_password, users_collection, client, students_collection, companies_collection, contents_collection
 
 # Import course logic functions from courses.py
 from courses import create_course_logic, get_course_logic, update_course_logic, delete_course_logic, get_company_courses_logic, get_all_courses_logic
+
+# Import course content logic functions from course_content.py
+from course_content import create_content_logic, get_content_logic, update_content_logic, delete_content_logic, get_course_contents_logic
 
 
 # Configure logging
@@ -170,6 +173,32 @@ def get_company_courses(company_name):
 @app.route('/courses', methods=['GET']) # Get all courses
 def get_all_courses():
     return get_all_courses_logic() # Call logic function from courses.py
+
+
+# --- Course Content Routes (Calling logic from course_content.py) ---
+
+@app.route('/courses/<course_id>/contents', methods=['POST'])
+@jwt_required()
+def create_content(course_id):
+    return create_content_logic(course_id) # Call logic function from course_content.py
+
+@app.route('/contents/<content_id>', methods=['GET'])
+def get_content(content_id):
+    return get_content_logic(content_id) # Call logic function from course_content.py
+
+@app.route('/contents/<content_id>', methods=['PUT'])
+@jwt_required()
+def update_content(content_id):
+    return update_content_logic(content_id) # Call logic function from course_content.py
+
+@app.route('/contents/<content_id>', methods=['DELETE'])
+@jwt_required()
+def delete_content(content_id):
+    return delete_content_logic(content_id) # Call logic function from course_content.py
+
+@app.route('/courses/<course_id>/contents', methods=['GET'])
+def get_course_contents(course_id):
+    return get_course_contents_logic(course_id) # Call logic function from course_content.py
 
 
 if __name__ == '__main__':
