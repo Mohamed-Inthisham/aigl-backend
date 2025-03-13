@@ -22,7 +22,8 @@ def allowed_file(filename, allowed_extensions={'png', 'jpg', 'jpeg', 'gif'}):
 
 def create_course_logic():
     claims = get_jwt()
-    user_role = claims.get_role()
+    user_role = claims.get('role') # Use dictionary's get method
+
     current_user_email = get_jwt_identity()
 
     if user_role != 'company':
@@ -113,7 +114,7 @@ def get_course_logic(course_id):
 
 def update_course_logic(course_id):
     claims = get_jwt()
-    user_role = claims.get_role()
+    user_role = claims.get('role') # Use dictionary's get method
     current_user_email = get_jwt_identity()
 
     if user_role != 'company':
@@ -185,7 +186,7 @@ def update_course_logic(course_id):
 
 def delete_course_logic(course_id):
     claims = get_jwt()
-    user_role = claims.get_role()
+    user_role = claims.get('role') # Use dictionary's get method
     current_user_email = get_jwt_identity()
 
     if user_role != 'company':
