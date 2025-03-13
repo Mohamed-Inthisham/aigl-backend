@@ -28,9 +28,10 @@ def create_mcq_logic(content_id):
     if not all(field in data for field in required_fields):
         return jsonify({"msg": "Missing required fields: question_text, options, correct_answer"}), 400
 
-    question_text = data.get('question_text')
-    options = data.get('options') # Assuming options is a list of strings
-    correct_answer = data.get('correct_answer') # Assuming correct_answer is a string (e.g., 'A', 'B', 'C', 'D')
+    # **VERY CAREFULLY CHECK THESE LINES FOR TYPOS - CASE SENSITIVITY MATTERS!**
+    question_text = data.get('question_text')  # **Ensure 'question_text' is EXACTLY as in frontend payload**
+    options = data.get('options')              # **Ensure 'options' is EXACTLY as in frontend payload**
+    correct_answer = data.get('correct_answer') # **Ensure 'correct_answer' is EXACTLY as in frontend payload**
 
     if not isinstance(options, list):
         return jsonify({"msg": "'options' must be a list"}), 400
