@@ -9,7 +9,7 @@ import os
 from werkzeug.utils import secure_filename
 
 # Import database collections and client from auth_utils.py
-from auth_utils import courses_collection, companies_collection
+from auth_utils import courses_collection, companies_collection, contents_collection  # Import contents_collection
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ def allowed_file(filename, allowed_extensions={'png', 'jpg', 'jpeg', 'gif'}):
 
 def create_course_logic():
     claims = get_jwt()
-    user_role = claims.get('role')
+    user_role = claims.get_role()
     current_user_email = get_jwt_identity()
 
     if user_role != 'company':
@@ -30,7 +30,7 @@ def create_course_logic():
 
     data = request.form  # Use request.form for file uploads
     if not data:
-        return jsonify({"msg": "No form data provided"}), 400
+        return jsonify({"msg": "No data provided"}), 400
 
     required_fields = ['course_name', 'introduction', 'level']
     if not all(field in data for field in required_fields):
@@ -39,20 +39,20 @@ def create_course_logic():
     course_name = data.get('course_name')
     introduction = data.get('introduction')
     level = data.get('level')
-    course_image_file = request.files.get('course_image') # Get uploaded file
+    course_image_file = request.files.get('course_image')  # Get uploaded file
 
     company_data = companies_collection.find_one({'email': current_user_email})
     if not company_data:
         return jsonify({"msg": "Company profile not found"}), 404
 
     company_name = company_data.get('company_name')
-    company_image = company_data.get('image') # Get company image path from DB
+    company_image = company_data.get('image')  # Get company image path from DB
 
     course_image_filepath = None
 
     if course_image_file and course_image_file.filename != '':
         try:
-            upload_folder = current_app.config['UPLOAD_COURSE_IMAGE_FOLDER'] # Get course image upload folder
+            upload_folder = current_app.config['UPLOAD_COURSE_IMAGE_FOLDER']  # Get course image upload folder
             if not os.path.exists(upload_folder):
                 os.makedirs(upload_folder)
 
@@ -62,7 +62,7 @@ def create_course_logic():
                 filename = secure_filename(unique_filename)
                 image_path = os.path.join(upload_folder, filename)
                 course_image_file.save(image_path)
-                course_image_filepath = "/store/course_images/" + filename # Relative path to serve images
+                course_image_filepath = "/store/course_images/" + filename  # Relative path to serve images
                 logger.info(f"Course image saved to: {course_image_filepath} for course: {course_name}")
             else:
                 return jsonify({"msg": "Invalid file type for course image"}), 400
@@ -71,14 +71,13 @@ def create_course_logic():
             logger.error(f"Error saving course image for course {course_name}: {e}")
             return jsonify({"msg": "Error saving course image"}), 500
 
-
     try:
         course_data = {
             'course_name': course_name,
-            'company_name': company_name, # Get from company profile
+            'company_name': company_name,  # Get from company profile
             'company_email': current_user_email,
-            'company_image': company_image, # Get from company profile
-            'course_image': course_image_filepath, # Store relative path
+            'company_image': company_image,  # Get from company profile
+            'course_image': course_image_filepath,  # Store relative path
             'introduction': introduction,
             'level': level,
             'uploaded_date': datetime.utcnow()
@@ -114,13 +113,13 @@ def get_course_logic(course_id):
 
 def update_course_logic(course_id):
     claims = get_jwt()
-    user_role = claims.get('role')
+    user_role = claims.get_role()
     current_user_email = get_jwt_identity()
 
     if user_role != 'company':
         return jsonify({"msg": "Companies only can update courses"}), 403
 
-    data = request.form # Use request.form for file upload
+    data = request.form  # Use request.form for file upload
     if not data:
         return jsonify({"msg": "No data provided for update"}), 400
 
@@ -135,12 +134,12 @@ def update_course_logic(course_id):
             return jsonify({"msg": "You are not authorized to update this course"}), 403
 
         updated_data = {}
-        allowed_fields = ['course_name', 'introduction', 'level'] # Allowed text fields
+        allowed_fields = ['course_name', 'introduction', 'level']  # Allowed text fields
         for field in allowed_fields:
             if field in data:
                 updated_data[field] = data[field]
 
-        course_image_file = request.files.get('course_image') # Check for new image upload
+        course_image_file = request.files.get('course_image')  # Check for new image upload
         if course_image_file and course_image_file.filename != '':
             try:
                 upload_folder = current_app.config['UPLOAD_COURSE_IMAGE_FOLDER']
@@ -154,7 +153,7 @@ def update_course_logic(course_id):
                     image_path = os.path.join(upload_folder, filename)
                     course_image_file.save(image_path)
                     course_image_filepath = "/store/course_images/" + filename
-                    updated_data['course_image'] = course_image_filepath # Update course image path
+                    updated_data['course_image'] = course_image_filepath  # Update course image path
                     logger.info(f"Course image updated to: {course_image_filepath} for course id: {course_id}")
                 else:
                     return jsonify({"msg": "Invalid file type for course image"}), 400
@@ -163,10 +162,8 @@ def update_course_logic(course_id):
                 logger.error(f"Error updating course image for course id {course_id}: {e}")
                 return jsonify({"msg": "Error updating course image"}), 500
 
-
-        if not updated_data and not course_image_file: # Check if any updates to text fields or image
+        if not updated_data and not course_image_file:  # Check if any updates to text fields or image
             return jsonify({"msg": "No valid fields to update provided"}), 400
-
 
         result = courses_collection.update_one({"_id": course_object_id}, {"$set": updated_data})
 
@@ -188,7 +185,7 @@ def update_course_logic(course_id):
 
 def delete_course_logic(course_id):
     claims = get_jwt()
-    user_role = claims.get('role')
+    user_role = claims.get_role()
     current_user_email = get_jwt_identity()
 
     if user_role != 'company':
@@ -224,10 +221,17 @@ def delete_course_logic(course_id):
 
 def get_company_courses_logic(company_name):
     try:
-        courses = list(courses_collection.find({"company_name": company_name}))
-        for course in courses:
-            course['_id'] = str(course['_id'])
-        return jsonify(courses), 200
+        courses_cursor = courses_collection.find({"company_name": company_name})  # Get a cursor, not a list yet
+        courses_list = list(courses_cursor)  # Convert cursor to list to iterate and modify
+
+        for course in courses_list:
+            course['_id'] = str(course['_id'])  # Convert ObjectId to string
+
+            # **Fetch and count lessons for each course**
+            lesson_count = contents_collection.count_documents({"course_id": ObjectId(course['_id'])})
+            course['lesson_count'] = lesson_count  # Add lesson_count to course data
+
+        return jsonify(courses_list), 200  # Return the modified list
     except errors.PyMongoError as e:
         logger.error(f"Database error fetching company courses: {e}")
         return jsonify({"msg": f"Could not retrieve company courses due to database error: {str(e)}"}), 500
