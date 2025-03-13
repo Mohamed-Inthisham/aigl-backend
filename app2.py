@@ -94,11 +94,20 @@ def login():
 
             profile_image_url = profile_data.get('image') if profile_data else None
 
+            company_name_claim = None  # Initialize company_name_claim to None
+
+            if user_role == 'company' and company_profile:  # **Crucially, check if company_profile is NOT None**
+                company_name_claim = company_profile.get('company_name')  # **Extract company_name from company_profile**
+            else:
+                company_name_claim = None  # Ensure it's None for non-company users
+
+
             access_token = create_access_token(
                 identity=email,
                 additional_claims={
                     'role': user_role,
-                    'profile_image_url': profile_image_url
+                    'profile_image_url': profile_image_url,
+                    'company_name': company_name_claim # **Include company_name_claim here**
                 }
             )
             logger.info(f"User with email {email} logged in successfully")
