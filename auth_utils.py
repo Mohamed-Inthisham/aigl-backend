@@ -27,7 +27,8 @@ students_collection = None
 companies_collection = None
 courses_collection = None
 contents_collection = None
-mcqs_collection = None # Initialize mcqs_collection
+mcqs_collection = None
+enrollments_collection = None # Initialize enrollments_collection
 
 try:
     client = MongoClient(os.environ["MONGO_DB_URI"])
@@ -37,7 +38,8 @@ try:
     companies_collection = db['companies']
     courses_collection = db['courses']
     contents_collection = db['contents']
-    mcqs_collection = db['mcqs'] # Initialize mcqs_collection here
+    mcqs_collection = db['mcqs']
+    enrollments_collection = db['enrollments'] # Initialize enrollments_collection here
     logger.info("Connected to MongoDB and collections initialized in auth_utils.py")
 except Exception as e:
     logger.error(f"Error connecting to MongoDB or initializing collections in auth_utils.py: {e}")
@@ -214,5 +216,6 @@ __all__ = [
     'companies_collection',
     'courses_collection',
     'contents_collection',
-    'mcqs_collection', # Export mcqs_collection
+    'mcqs_collection',
+    'enrollments_collection' # Export enrollments_collection
 ]

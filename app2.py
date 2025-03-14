@@ -9,18 +9,12 @@ from flask_cors import CORS
 from bson.objectid import ObjectId
 from datetime import datetime
 
-# Import our updated auth_utils module
-from auth_utils import register_student_user, register_company_user, verify_password, users_collection, client, students_collection, companies_collection, contents_collection, mcqs_collection
-
-# Import course logic functions from courses.py
+# Import auth_utils, course logic, content logic, and mcq logic
+from auth_utils import register_student_user, register_company_user, verify_password, users_collection, client, students_collection, companies_collection, courses_collection, contents_collection, mcqs_collection
 from courses import create_course_logic, get_course_logic, update_course_logic, delete_course_logic, get_company_courses_logic, get_all_courses_logic
-
-# Import course content logic functions from course_content.py
 from course_content import create_content_logic, get_content_logic, update_content_logic, delete_content_logic, get_course_contents_logic
-
-# Import mcq logic functions from mcq.py
-from mcq import create_mcq_logic, get_mcq_logic, update_mcq_logic, delete_mcq_logic, get_content_mcqs_logic, check_mcq_answer_logic # Import check_mcq_answer_logic
-
+from mcq import create_mcq_logic, get_mcq_logic, update_mcq_logic, delete_mcq_logic, get_content_mcqs_logic, check_mcq_answer_logic
+import enrollments  # Import the enrollments module
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -241,6 +235,18 @@ def get_content_mcqs(content_id):
 @app.route('/mcqs/<mcq_id>/checkAnswer', methods=['POST']) # New route for checking answer
 def check_answer(mcq_id):
     return check_mcq_answer_logic(mcq_id) # Call logic function from mcq.py
+
+
+# --- Enrollment Routes (Calling logic from enrollments.py) ---
+@app.route('/courses/<course_id>/enroll', methods=['POST'])
+@jwt_required()
+def enroll_in_course(course_id):
+    return enrollments.enroll_in_course_logic(course_id) # Call logic function from enrollments.py
+
+@app.route('/me/enrolled-courses', methods=['GET'])
+@jwt_required()
+def get_student_enrolled_courses():
+    return enrollments.get_student_enrolled_courses_logic() # Call logic function from enrollments.py
 
 
 if __name__ == '__main__':
