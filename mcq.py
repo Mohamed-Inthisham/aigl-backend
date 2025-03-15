@@ -207,13 +207,33 @@ def check_mcq_answer_logic(mcq_id):
         if not mcq:
             return jsonify({"msg": "MCQ not found"}), 404
 
-        correct_answer = mcq.get('correct_answer')
+        correct_answer_letter = mcq.get('correct_answer') # Get correct answer letter ("A", "B", "C", "D")
+        options = mcq.get('options') # Get the options list
 
-        is_correct = student_answer.strip().lower() == correct_answer.strip().lower() # Case-insensitive and whitespace-insensitive comparison
+        correct_option_text = ""
+        if correct_answer_letter == "A":
+            correct_option_text = options[0] if len(options) > 0 else ""
+        elif correct_answer_letter == "B":
+            correct_option_text = options[1] if len(options) > 1 else ""
+        elif correct_answer_letter == "C":
+            correct_option_text = options[2] if len(options) > 2 else ""
+        elif correct_answer_letter == "D":
+            correct_option_text = options[3] if len(options) > 3 else ""
+        # Add more elif for more options if needed
+
+        logger.debug(f"Correct answer letter from DB: {correct_answer_letter}") # Debugging log
+        logger.debug(f"Correct option text (determined): {correct_option_text}") # Debugging log
+        logger.debug(f"Received student_answer: {student_answer}") # Debugging log
+
+
+        is_correct = student_answer.strip().lower() == correct_option_text.strip().lower() # Compare student answer with CORRECT OPTION TEXT
+
+        logger.debug(f"Comparison result (before return): {is_correct}") # Debugging log
+
 
         return jsonify({
             "is_correct": is_correct,
-            "correct_answer": correct_answer,
+            "correct_answer": correct_answer_letter, # Return the letter for frontend info
             "student_answer": student_answer,
             "mcq_id": mcq_id
         }), 200
