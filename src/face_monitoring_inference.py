@@ -393,7 +393,7 @@ def video_face_inference(
 
 def face_analysis(
                 username,
-                x_min = 60
+                x_min = 10
                 ):
     current_time = datetime.now()
     current_time_minus_x = current_time - timedelta(minutes=x_min)
