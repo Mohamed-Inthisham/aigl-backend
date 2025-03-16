@@ -10,11 +10,12 @@ from bson.objectid import ObjectId
 from datetime import datetime
 
 # Import auth_utils, course logic, content logic, and mcq logic
-from auth_utils import register_student_user, register_company_user, verify_password, users_collection, client, students_collection, companies_collection, courses_collection, contents_collection, mcqs_collection
+from auth_utils import register_student_user, register_company_user, verify_password, users_collection, client, students_collection, companies_collection, courses_collection, contents_collection, mcqs_collection, fluency_test_collection # Import fluency_test_collection
 from courses import create_course_logic, get_course_logic, update_course_logic, delete_course_logic, get_company_courses_logic, get_all_courses_logic
 from course_content import create_content_logic, get_content_logic, update_content_logic, delete_content_logic, get_course_contents_logic
 from mcq import create_mcq_logic, get_mcq_logic, update_mcq_logic, delete_mcq_logic, get_content_mcqs_logic, check_mcq_answer_logic
 import enrollments  # Import the enrollments module
+import fluency # Import fluency logic
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -247,6 +248,35 @@ def enroll_in_course(course_id):
 @jwt_required()
 def get_student_enrolled_courses():
     return enrollments.get_student_enrolled_courses_logic() # Call logic function from enrollments.py
+
+
+# --- Fluency Test Routes (Calling logic from fluency.py) ---
+@app.route('/courses/<course_id>/fluency_tests', methods=['POST'])
+@jwt_required()
+def create_fluency_test(course_id):
+    return fluency.create_fluency_test_logic(course_id)
+
+@app.route('/fluency_tests/<fluency_test_id>', methods=['GET'])
+def get_fluency_test(fluency_test_id):
+    return fluency.get_fluency_test_logic(fluency_test_id)
+
+@app.route('/fluency_tests/<fluency_test_id>', methods=['PUT'])
+@jwt_required()
+def update_fluency_test(fluency_test_id):
+    return fluency.update_fluency_test_logic(fluency_test_id)
+
+@app.route('/fluency_tests/<fluency_test_id>', methods=['DELETE'])
+@jwt_required()
+def delete_fluency_test(fluency_test_id):
+    return fluency.delete_fluency_test_logic(fluency_test_id)
+
+@app.route('/courses/<course_id>/fluency_tests', methods=['GET']) # this is for get all fluency tests
+def get_course_fluency_tests(course_id):
+    return fluency.get_course_fluency_tests_logic(course_id)
+
+@app.route('/courses/<course_id>/fluency_test', methods=['GET']) # New route to fetch fluency test by course_id
+def get_course_fluency_test(course_id):
+    return fluency.get_fluency_test_by_course_id_logic(course_id)
 
 
 if __name__ == '__main__':
