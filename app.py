@@ -139,7 +139,7 @@ def api_document_rag():
     except Exception as e:
         return Response(
                         response=json.dumps({
-                                            "message": "Document RAG failed",
+                                            "message": "Anomaly PDF Detected.Please Upload a Valid CV",
                                             "error": str(e)
                                             }),
                         status=400,
