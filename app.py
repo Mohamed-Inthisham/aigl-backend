@@ -11,7 +11,7 @@ app = Flask(__name__)
 app.config['UPLOAD_IMAGE_FOLDER'] = 'store/images'
 app.config['UPLOAD_AUDIO_FOLDER'] = 'store/audios'
 app.config['UPLOAD_CV_FOLDER'] = 'store/cvs'
-CORS(app)
+CORS(app, origins="http://localhost:5173")
 
 @app.route('/api/face_detection', methods=['POST'])
 def api_face_detection():
