@@ -1,3 +1,4 @@
+# auth_utils.py
 from flask import request, jsonify
 from pymongo import MongoClient, errors
 import bcrypt
@@ -29,6 +30,8 @@ contents_collection = None
 mcqs_collection = None
 enrollments_collection = None # Initialize enrollments_collection
 fluency_test_collection = None # Initialize fluency_test_collection
+essay_question_collection = None # Initialize essay_question_collection
+
 
 try:
     client = MongoClient(os.environ["MONGO_DB_URI"])
@@ -41,6 +44,7 @@ try:
     mcqs_collection = db['mcqs']
     enrollments_collection = db['enrollments'] # Initialize enrollments_collection here
     fluency_test_collection = db['fluency_test'] # Initialize fluency_test_collection here
+    essay_question_collection = db['essay_question'] # Initialize essay_question_collection here
     logger.info("Connected to MongoDB and collections initialized in auth_utils.py")
 except Exception as e:
     logger.error(f"Error connecting to MongoDB or initializing collections in auth_utils.py: {e}")
@@ -219,5 +223,6 @@ __all__ = [
     'contents_collection',
     'mcqs_collection',
     'enrollments_collection', # Export enrollments_collection
-    'fluency_test_collection' # Export fluency_test_collection
+    'fluency_test_collection', # Export fluency_test_collection
+    'essay_question_collection' # Export essay_question_collection
 ]
