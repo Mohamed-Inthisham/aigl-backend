@@ -65,11 +65,10 @@ def login():
         logger.warning(f"Login failed: Missing email or password for email {email}")
         return jsonify({"msg": "Missing email or password"}), 400
 
-    mongo_client = client
     try:
         client.admin.command('ping')
 
-        user = users_collection.find_one({'email': email})
+        user = users_collection.find_one({'email': email}) # Fetches the user document which now includes 'username'
 
         if not user:
             logger.info(f"Login failed: User with email {email} not found")
@@ -77,37 +76,48 @@ def login():
 
         if verify_password(password, user['password_hash']):
             user_role = user['role']
+            # Get the username directly from the user document
+            username_from_users_collection = user.get('username') # <--- GET USERNAME HERE
 
             profile_data = None
 
             if user_role == 'student':
-                student_profile = students_collection.find_one({'email': email})
+                student_profile = students_collection.find_one({'user_id': user['_id']})
                 if student_profile:
                     profile_data = student_profile
+                else:
+                    logger.warning(f"Student profile not found for user_id: {user['_id']} with email: {email}")
             elif user_role == 'company':
-                company_profile = companies_collection.find_one({'email': email})
+                company_profile = companies_collection.find_one({'user_id': user['_id']})
                 if company_profile:
                     profile_data = company_profile
+                else:
+                    logger.warning(f"Company profile not found for user_id: {user['_id']} with email: {email}")
 
             profile_image_url = profile_data.get('image') if profile_data else None
 
-            company_name_claim = None  # Initialize company_name_claim to None
+            # --- CONSTRUCT ADDITIONAL CLAIMS ---
+            access_token_claims = {
+                'role': user_role,
+                'profile_image_url': profile_image_url,
+                'username': username_from_users_collection # <--- ADDING THE USERNAME FROM USERS COLLECTION
+            }
 
-            if user_role == 'company' and company_profile:  # **Crucially, check if company_profile is NOT None**
-                company_name_claim = company_profile.get('company_name')  # **Extract company_name from company_profile**
-            else:
-                company_name_claim = None  # Ensure it's None for non-company users
-
+            # Add role-specific claims (firstname/lastname for student, company_name for company)
+            if user_role == 'student' and profile_data:
+                access_token_claims['firstname'] = profile_data.get('firstname')
+                access_token_claims['lastname'] = profile_data.get('lastname')
+                logger.info(f"Student specific claims: firstname={profile_data.get('firstname')}, lastname={profile_data.get('lastname')}")
+            elif user_role == 'company' and profile_data:
+                access_token_claims['company_name'] = profile_data.get('company_name')
+                logger.info(f"Company specific claim: company_name={profile_data.get('company_name')}")
+            # --- END OF CONSTRUCTING ADDITIONAL CLAIMS ---
 
             access_token = create_access_token(
                 identity=email,
-                additional_claims={
-                    'role': user_role,
-                    'profile_image_url': profile_image_url,
-                    'company_name': company_name_claim # **Include company_name_claim here**
-                }
+                additional_claims=access_token_claims
             )
-            logger.info(f"User with email {email} logged in successfully")
+            logger.info(f"User with email {email} logged in successfully. JWT Claims being sent: {access_token_claims}")
             return jsonify(access_token=access_token), 200
         else:
             logger.info(f"Login failed: Incorrect password for email {email}")
@@ -117,9 +127,8 @@ def login():
         logger.error(f"MongoDB error during login: {e}")
         return jsonify({"msg": f"Login failed due to database error: {str(e)}"}), 500
     except Exception as e:
-        logger.error(f"Error during login: {e}")
+        logger.error(f"Error during login: {e}", exc_info=True)
         return jsonify({"msg": "Login failed due to a server error"}), 500
-
 
 @app.route('/protected', methods=['GET'])
 @jwt_required()
