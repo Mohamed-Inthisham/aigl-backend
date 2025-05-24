@@ -31,6 +31,7 @@ mcqs_collection = None
 enrollments_collection = None
 fluency_test_collection = None
 essay_question_collection = None
+marks_collection = None
 
 
 try:
@@ -45,6 +46,9 @@ try:
     enrollments_collection = db['enrollments']
     fluency_test_collection = db['fluency_test']
     essay_question_collection = db['essay_question']
+    marks_collection = db['marks']
+    flow_collection = db['flow']
+    qna_collection = db['qna']
     logger.info("Connected to MongoDB and collections initialized in auth_utils.py")
 except Exception as e:
     logger.error(f"Error connecting to MongoDB or initializing collections in auth_utils.py: {e}")
@@ -235,5 +239,6 @@ __all__ = [
     'mcqs_collection',
     'enrollments_collection',
     'fluency_test_collection',
-    'essay_question_collection'
+    'essay_question_collection',
+    'marks_collection'
 ]

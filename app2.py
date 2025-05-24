@@ -9,6 +9,7 @@ import logging
 import yaml
 from werkzeug.utils import secure_filename
 from flask_cors import CORS
+import bson.errors # <<< --- ADD THIS IMPORT
 
 # Import auth_utils, course logic, content logic, mcq logic, etc.
 # Ensure all necessary collections are exported from auth_utils
@@ -25,7 +26,10 @@ from auth_utils import (
     mcqs_collection,
     enrollments_collection, # Make sure this is available
     fluency_test_collection,
-    essay_question_collection
+    essay_question_collection,
+    fluency_test_collection,
+    essay_question_collection,
+    marks_collection
 )
 from courses import create_course_logic, get_course_logic, update_course_logic, delete_course_logic, get_company_courses_logic, get_all_courses_logic
 from course_content import create_content_logic, get_content_logic, update_content_logic, delete_content_logic, get_course_contents_logic
@@ -33,6 +37,7 @@ from mcq import create_mcq_logic, get_mcq_logic, update_mcq_logic, delete_mcq_lo
 import enrollments  # Import the enrollments module
 import fluency # Import fluency logic
 import questions # Import questions logic
+import marks
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -81,10 +86,7 @@ def login():
         return jsonify({"msg": "Missing email or password"}), 400
 
     try:
-        # Ping the database to ensure connection (optional, client init in auth_utils should handle this)
-        # client.admin.command('ping') 
-
-        user = users_collection.find_one({'email': email}) # Fetches the user document which now includes 'username'
+        user = users_collection.find_one({'email': email})
 
         if not user:
             logger.info(f"Login failed: User with email {email} not found")
@@ -92,50 +94,59 @@ def login():
 
         if verify_password(password, user['password_hash']):
             user_role = user['role']
-            # Get the username directly from the user document
-            username_from_users_collection = user.get('username') # <--- GET USERNAME HERE
+            username_from_users_collection = user.get('username') # This is the generated username
+            user_mongodb_id_str = str(user['_id']) # <<< --- GET THE MONGODB _id AS STRING
 
             profile_data = None
-            company_name_claim = None
-
+            # ... (your existing profile_data fetching logic) ...
             if user_role == 'student':
                 student_profile = students_collection.find_one({'user_id': user['_id']})
                 if student_profile:
                     profile_data = student_profile
-                else:
-                    logger.warning(f"Student profile not found for user_id: {user['_id']} with email: {email}")
+                # ...
             elif user_role == 'company':
                 company_profile = companies_collection.find_one({'user_id': user['_id']})
                 if company_profile:
                     profile_data = company_profile
-                else:
-                    logger.warning(f"Company profile not found for user_id: {user['_id']} with email: {email}")
+                # ...
 
             profile_image_url = profile_data.get('image') if profile_data else None
 
-            # --- CONSTRUCT ADDITIONAL CLAIMS ---
             access_token_claims = {
                 'role': user_role,
                 'profile_image_url': profile_image_url,
-                'username': username_from_users_collection # <--- ADDING THE USERNAME FROM USERS COLLECTION
+                'username_claim': username_from_users_collection, # Keep this if frontend uses it from token
+                # It's often better to send user details in login response body than pack too much in JWT
             }
-
-            # Add role-specific claims (firstname/lastname for student, company_name for company)
             if user_role == 'student' and profile_data:
                 access_token_claims['firstname'] = profile_data.get('firstname')
                 access_token_claims['lastname'] = profile_data.get('lastname')
-                logger.info(f"Student specific claims: firstname={profile_data.get('firstname')}, lastname={profile_data.get('lastname')}")
             elif user_role == 'company' and profile_data:
                 access_token_claims['company_name'] = profile_data.get('company_name')
-                logger.info(f"Company specific claim: company_name={profile_data.get('company_name')}")
-            # --- END OF CONSTRUCTING ADDITIONAL CLAIMS ---
 
             access_token = create_access_token(
-                identity=email,
+                identity=email, # 'sub' claim will be the email
                 additional_claims=access_token_claims
             )
-            logger.info(f"User with email {email} logged in successfully. JWT Claims being sent: {access_token_claims}")
-            return jsonify(access_token=access_token), 200
+            logger.info(f"User {email} logged in. Role: {user_role}. MongoDB ID: {user_mongodb_id_str}")
+
+            # --- MODIFIED RESPONSE ---
+            response_data = {
+                "access_token": access_token,
+                "userId": user_mongodb_id_str,      # <<< --- ADD THE MONGODB _id HERE
+                "role": user_role,
+                "email": email, # Already in token 'sub', but can be explicit
+                "username": username_from_users_collection, # The generated username
+                "profile_image_url": profile_image_url
+            }
+            if user_role == 'student' and profile_data:
+                response_data['firstname'] = profile_data.get('firstname')
+                response_data['lastname'] = profile_data.get('lastname')
+            elif user_role == 'company' and profile_data:
+                response_data['company_name'] = profile_data.get('company_name')
+            # --- END MODIFIED RESPONSE ---
+
+            return jsonify(response_data), 200
         else:
             logger.info(f"Login failed: Incorrect password for email {email}")
             return jsonify({"msg": "Invalid email or password"}), 401
@@ -146,7 +157,7 @@ def login():
     except Exception as e:
         logger.error(f"Error during login: {e}", exc_info=True)
         return jsonify({"msg": "Login failed due to a server error"}), 500
-
+    
 @app.route('/protected', methods=['GET'])
 @jwt_required()
 def protected():
@@ -427,6 +438,89 @@ def get_course_essay_questions(course_id):
 def get_course_essay_question(course_id):
     return questions.get_course_essay_question_by_course_id_logic(course_id)
 
+
+@app.route('/marks/user/<user_id_str>/course/<course_id_str>', methods=['POST'])
+@jwt_required()
+def save_user_course_marks(user_id_str, course_id_str):
+    claims = get_jwt()
+    requesting_user_email = get_jwt_identity()
+    requesting_user_role = claims.get('role')
+    
+    # <<< --- EXTRACT FIRSTNAME AND LASTNAME FROM JWT CLAIMS --- >>>
+    user_firstname_from_jwt = claims.get('firstname')
+    user_lastname_from_jwt = claims.get('lastname')
+
+    try:
+        actor_user_doc = users_collection.find_one({"email": requesting_user_email})
+        if not actor_user_doc:
+            logger.warning(f"Marks save attempt by non-existent user (email from token): {requesting_user_email}")
+            return jsonify({"msg": "Authenticated user not found"}), 403
+
+        actor_user_id_str = str(actor_user_doc['_id'])
+
+        if requesting_user_role == 'student':
+            if actor_user_id_str != user_id_str:
+                logger.warning(f"Auth fail: Student {requesting_user_email} (ID: {actor_user_id_str}) tried to save marks for different user {user_id_str}")
+                return jsonify({"msg": "Unauthorized: You can only save your own marks."}), 403
+        elif requesting_user_role != 'admin':
+            logger.warning(f"Auth fail: Role {requesting_user_role} ({requesting_user_email}) tried to save marks.")
+            return jsonify({"msg": "Unauthorized role for this action."}), 403
+        
+        logger.info(f"Marks save authorized for user {user_id_str}, course {course_id_str} by {requesting_user_email} ({requesting_user_role}).")
+        
+        # <<< --- PASS FIRSTNAME AND LASTNAME TO THE LOGIC FUNCTION --- >>>
+        result_data, status_code = marks.save_specific_user_marks_logic(
+            user_id_str, 
+            course_id_str,
+            user_firstname_from_jwt, # New argument
+            user_lastname_from_jwt   # New argument
+        )
+        
+        if isinstance(result_data, dict) and "error" in result_data:
+            return jsonify(result_data), status_code 
+            
+        return jsonify(result_data), status_code
+
+    except bson.errors.InvalidId: 
+        logger.error(f"Invalid ID format for user_id '{user_id_str}' or course_id '{course_id_str}' during marks save route processing.")
+        return jsonify({"msg": "Invalid user or course ID format provided."}), 400
+    except Exception as e:
+        logger.error(f"Unexpected error in save_user_course_marks route for user {user_id_str}: {e}", exc_info=True)
+        return jsonify({"msg": "Server error during marks processing"}), 500
+    
+@app.route('/marks/user/<user_id_str>', methods=['GET'])
+@jwt_required()
+def get_marks_for_specific_user(user_id_str):
+    # ... (claims, requesting_user_email, requesting_user_role, actor_user_doc, actor_user_id_str, authorization checks) ...
+    try:
+        logger.info(f"Marks retrieval authorized for user {user_id_str} by {requesting_user_email} ({requesting_user_role}).")
+        # The ObjectId conversion happens inside marks.get_specific_user_marks_logic
+        return marks.get_specific_user_marks_logic(user_id_str)
+
+    except bson.errors.InvalidId: # <<< --- CORRECTED EXCEPTION
+        logger.error(f"Invalid user ID format '{user_id_str}' for getting marks.")
+        return jsonify({"msg": "Invalid user ID format in URL"}), 400
+    except Exception as e:
+        logger.error(f"Unexpected error during authorization or getting user marks for {user_id_str}: {e}", exc_info=True)
+        return jsonify({"msg": "Server error during authorization or marks retrieval"}), 500
+
+
+@app.route('/marks/all', methods=['GET']) # Changed route for clarity
+@jwt_required()
+def get_marks_for_all_students():
+    """
+    Endpoint to get all marks records for all students.
+    Primarily for admin use.
+    """
+    claims = get_jwt()
+    requesting_user_role = claims.get('role')
+
+    if requesting_user_role not in ['admin']: # Strict check for admin role
+        logger.warning(f"Auth fail: Role {requesting_user_role} tried to access all student marks.")
+        return jsonify({"msg": "Unauthorized: This action requires admin privileges."}), 403
+    
+    logger.info(f"All marks retrieval authorized for admin user.")
+    return marks.get_all_students_marks_logic()
 
 if __name__ == '__main__':
     logger.info("Starting Flask application...")
