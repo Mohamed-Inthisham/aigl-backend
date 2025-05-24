@@ -54,7 +54,7 @@ CORS(app, origins="http://localhost:5173") # Your frontend origin
 # --- Configure Upload Folders ---
 app.config['UPLOAD_IMAGE_FOLDER'] = 'store/images'
 app.config['UPLOAD_COURSE_IMAGE_FOLDER'] = r'C:\Users\moham\OneDrive\Desktop\SkillNet\AIGL\store\images\course' # Course image folder
-app.config['UPLOAD_JD_FOLDER'] = r'C:\Users\94702\Desktop\AIGL-Backend\aigl-backend\store\images\jd'#os.path.join(app.root_path, 'store', 'jd_pdfs') # Or your preferred path
+app.config['UPLOAD_JD_FOLDER'] = r'C:\Users\moham\OneDrive\Desktop\SkillNet\AIGL\store\images\jd'#os.path.join(app.root_path, 'store', 'jd_pdfs') # Or your preferred path
 os.makedirs(app.config['UPLOAD_IMAGE_FOLDER'], exist_ok=True)
 os.makedirs(app.config['UPLOAD_COURSE_IMAGE_FOLDER'], exist_ok=True)
 os.makedirs(app.config['UPLOAD_JD_FOLDER'], exist_ok=True)
