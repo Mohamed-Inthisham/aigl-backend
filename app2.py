@@ -29,7 +29,10 @@ from auth_utils import (
     essay_question_collection,
     fluency_test_collection,
     essay_question_collection,
-    marks_collection
+    marks_collection,
+    jds_collection,
+    jds_cv_collection,
+    
 )
 from courses import create_course_logic, get_course_logic, update_course_logic, delete_course_logic, get_company_courses_logic, get_all_courses_logic
 from course_content import create_content_logic, get_content_logic, update_content_logic, delete_content_logic, get_course_contents_logic
@@ -38,6 +41,8 @@ import enrollments  # Import the enrollments module
 import fluency # Import fluency logic
 import questions # Import questions logic
 import marks
+import jd 
+import jd_cv 
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -49,8 +54,10 @@ CORS(app, origins="http://localhost:5173") # Your frontend origin
 # --- Configure Upload Folders ---
 app.config['UPLOAD_IMAGE_FOLDER'] = 'store/images'
 app.config['UPLOAD_COURSE_IMAGE_FOLDER'] = r'C:\Users\moham\OneDrive\Desktop\SkillNet\AIGL\store\images\course' # Course image folder
+app.config['UPLOAD_JD_FOLDER'] = r'C:\Users\94702\Desktop\AIGL-Backend\aigl-backend\store\images\jd'#os.path.join(app.root_path, 'store', 'jd_pdfs') # Or your preferred path
 os.makedirs(app.config['UPLOAD_IMAGE_FOLDER'], exist_ok=True)
 os.makedirs(app.config['UPLOAD_COURSE_IMAGE_FOLDER'], exist_ok=True)
+os.makedirs(app.config['UPLOAD_JD_FOLDER'], exist_ok=True)
 
 # Set a strong JWT secret key
 app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY", "your-jwt-secret-key-change-me-in-production") # IMPORTANT: Change this for production
@@ -439,6 +446,115 @@ def get_course_essay_question(course_id):
     return questions.get_course_essay_question_by_course_id_logic(course_id)
 
 
+# --------------JD Routes---------------
+@app.route('/jds', methods=['POST'])
+@jwt_required()
+def create_jd_route():
+    """
+    Endpoint to create a new Job Description by uploading a PDF.
+    Requires JWT authentication. Company role is checked within the logic.
+    Frontend should send 'jd_pdf' as a file in multipart/form-data.
+    """
+    return jd.create_jd_logic()
+
+@app.route('/jds/<string:jd_id>', methods=['GET'])
+def get_jd_route(jd_id):
+    """
+    Endpoint to retrieve a specific Job Description by its ID.
+    This route is public by default.
+    """
+    return jd.get_jd_logic(jd_id)
+
+@app.route('/jds/<string:jd_id>', methods=['PUT'])
+@jwt_required()
+def update_jd_route(jd_id):
+    """
+    Endpoint to update an existing Job Description.
+    Allows replacing the PDF and/or updating its status.
+    Requires JWT authentication. Company ownership is checked within the logic.
+    Frontend should send 'jd_pdf' (optional file) and 'status' (optional form field)
+    in multipart/form-data.
+    """
+    return jd.update_jd_logic(jd_id)
+
+@app.route('/jds/<string:jd_id>', methods=['DELETE'])
+@jwt_required()
+def delete_jd_route(jd_id):
+    """
+    Endpoint to delete a specific Job Description by its ID.
+    Requires JWT authentication. Company ownership is checked within the logic.
+    Associated PDF file will also be deleted.
+    """
+    return jd.delete_jd_logic(jd_id)
+
+@app.route('/jds/company/<string:company_identifier>', methods=['GET'])
+def get_company_jds_route(company_identifier):
+    """
+    Endpoint to retrieve all Job Descriptions for a specific company.
+    'company_identifier' can be the company's MongoDB _id (as a string) or email.
+    Logic function (get_company_jds_logic) handles querying. Public by default.
+    """
+    return jd.get_company_jds_logic(company_identifier)
+
+# Optional: Route for "my JDs" for the logged-in company
+@app.route('/jds/my', methods=['GET'])
+@jwt_required()
+def get_my_company_jds_route():
+    """
+    Endpoint for a logged-in company to retrieve its own Job Descriptions.
+    Uses the JWT identity (company_email) to fetch the JDs.
+    """
+    current_user_email = get_jwt_identity()
+    return jd.get_company_jds_logic(current_user_email) # Assumes get_company_jds_logic can take email
+
+
+@app.route('/jds', methods=['GET'])
+def get_all_jds_route():
+    """
+    Endpoint to retrieve all Job Descriptions.
+    Can be filtered by query parameters like ?status=active.
+    This route is public by default.
+    Note: This route has the same path as POST /jds. Flask handles this correctly
+    based on the HTTP method.
+    """
+    return jd.get_all_jds_logic()
+
+
+
+# --- CVs with Matched JDs Routes ---
+@app.route('/cvs/matched', methods=['POST']) # New POST route
+@jwt_required()
+def add_cv_jd_match_route():
+    """
+    Endpoint for a logged-in company (or authorized service) to add
+    a new CV-JD match record.
+    Expects a JSON body with 'cv_path' and 'matched_jd_paths'.
+    """
+    return jd_cv.create_cv_jd_match_logic()
+
+@app.route('/cvs', methods=['GET'])
+@jwt_required()  # Ensures only authenticated users can access
+def get_company_matched_cvs_route():
+    """
+    Endpoint for a logged-in company to retrieve its CVs 
+    along with their matched Job Descriptions.
+    The logic function handles identifying CV-JD match documents
+    associated with the current company.
+    """
+    return jd_cv.get_company_cv_jd_matches_logic()
+
+@app.route('/cvs/matched/<string:cv_match_id>', methods=['DELETE'])
+@jwt_required()  # Ensures only authenticated users can access
+def delete_company_matched_cv_route(cv_match_id):
+    """
+    Endpoint for a logged-in company to delete a specific CV-JD match record
+    by its MongoDB _id.
+    The logic function also handles deleting the associated CV PDF file.
+    """
+    return jd_cv.delete_company_cv_jd_match_logic(cv_match_id)
+
+
+
 @app.route('/marks/user/<user_id_str>/course/<course_id_str>', methods=['POST'])
 @jwt_required()
 def save_user_course_marks(user_id_str, course_id_str):
@@ -526,3 +642,5 @@ if __name__ == '__main__':
     logger.info("Starting Flask application...")
     # Consider adding host='0.0.0.0' if running in Docker or want to access from other devices on network
     app.run(debug=True, port=5001)
+
+
