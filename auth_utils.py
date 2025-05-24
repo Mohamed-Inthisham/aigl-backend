@@ -31,7 +31,8 @@ mcqs_collection = None
 enrollments_collection = None
 fluency_test_collection = None
 essay_question_collection = None
-
+jds_collection = None
+jds_cv_collection = None
 
 try:
     client = MongoClient(os.environ["MONGO_DB_URI"])
@@ -45,6 +46,8 @@ try:
     enrollments_collection = db['enrollments']
     fluency_test_collection = db['fluency_test']
     essay_question_collection = db['essay_question']
+    jds_collection = db['jd_list']
+    jds_cv_collection =  db['jds']
     logger.info("Connected to MongoDB and collections initialized in auth_utils.py")
 except Exception as e:
     logger.error(f"Error connecting to MongoDB or initializing collections in auth_utils.py: {e}")
@@ -235,5 +238,7 @@ __all__ = [
     'mcqs_collection',
     'enrollments_collection',
     'fluency_test_collection',
-    'essay_question_collection'
+    'essay_question_collection',
+    'jds_collection',
+    'jds_cv_collection'
 ]
