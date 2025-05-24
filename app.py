@@ -154,17 +154,30 @@ def api_answer_evaluation():
     question = request.form.get('question')
     correct_answer = request.form.get('correct_answer')
     user_answer = request.form.get('user_answer')
+    # --- ADD THESE LINES to get user and course details ---
+    user_id = request.form.get('userId')
+    course_id = request.form.get('courseId')
+    # --- END OF ADDITIONS ---
 
-    if not all([question, correct_answer, user_answer]):
+
+    if not all([question, correct_answer is not None, user_answer is not None]): # Check if correct_answer and user_answer exist, even if empty string
         return Response(
             response=json.dumps({"message": "Missing question, correct_answer, or user_answer"}),
             status=400,
             mimetype="application/json"
         )
     try:
-        score_response = inference_answer_evaluation(question, correct_answer, user_answer)
+        # --- MODIFY THIS CALL to pass the new parameters ---
+        score_response = inference_answer_evaluation(
+            question=question,
+            answer01=correct_answer, # Assuming answer01 is correct_answer
+            answer02=user_answer,   # Assuming answer02 is user_answer
+            user_id=user_id,        # Pass user_id
+            course_id=course_id     # Pass course_id
+        )
+        # --- END OF MODIFICATION ---
         return Response(
-            response=json.dumps({"Score": score_response}),
+            response=json.dumps({"Score": score_response}), # The function already returns the score string
             status=200,
             mimetype="application/json"
         )
