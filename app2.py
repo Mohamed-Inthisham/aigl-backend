@@ -607,18 +607,109 @@ def save_user_course_marks(user_id_str, course_id_str):
 @app.route('/marks/user/<user_id_str>', methods=['GET'])
 @jwt_required()
 def get_marks_for_specific_user(user_id_str):
-    # ... (claims, requesting_user_email, requesting_user_role, actor_user_doc, actor_user_id_str, authorization checks) ...
-    try:
-        logger.info(f"Marks retrieval authorized for user {user_id_str} by {requesting_user_email} ({requesting_user_role}).")
-        # The ObjectId conversion happens inside marks.get_specific_user_marks_logic
-        return marks.get_specific_user_marks_logic(user_id_str)
+    """
+    Endpoint to get all marks records for a specific user.
+    """
+    claims = get_jwt()
+    requesting_user_email = get_jwt_identity()  # <<< --- DEFINE IT AT THE TOP OF THE FUNCTION
+    requesting_user_role = claims.get('role')
 
-    except bson.errors.InvalidId: # <<< --- CORRECTED EXCEPTION
-        logger.error(f"Invalid user ID format '{user_id_str}' for getting marks.")
+    try:
+        actor_user_doc = users_collection.find_one({"email": requesting_user_email}) # Use the defined variable
+        if not actor_user_doc:
+            logger.warning(f"Marks retrieval attempt by non-existent user (email from token): {requesting_user_email}")
+            return jsonify({"msg": "Authenticated user not found"}), 403
+        
+        actor_user_id_str = str(actor_user_doc['_id'])
+
+        if requesting_user_role == 'student':
+            if actor_user_id_str != user_id_str:
+                logger.warning(f"Auth fail: Student {requesting_user_email} (ID: {actor_user_id_str}) tried to access marks for different user {user_id_str}")
+                return jsonify({"msg": "Unauthorized: You can only view your own marks."}), 403
+        elif requesting_user_role not in ['admin', 'company']: # Admins or Companies (with further checks for company)
+             logger.warning(f"Auth fail: Role {requesting_user_role} ({requesting_user_email}) tried to get marks for user {user_id_str}")
+             return jsonify({"msg": "Unauthorized role to view these marks."}), 403
+        
+        # If role is 'company', add further logic here to check if the company
+        # is authorized to view this specific student's (user_id_str) marks.
+        # This might involve checking enrollments for courses owned by the company.
+        # Example:
+        # if requesting_user_role == 'company':
+        #     requesting_company_name = claims.get('company_name')
+        #     if not is_student_in_company_course(user_id_str, requesting_company_name): # You'd need to implement this helper
+        #         logger.warning(f"Auth fail: Company {requesting_company_name} tried to access marks for user {user_id_str} not in their courses.")
+        #         return jsonify({"msg": "Unauthorized: Company can only view marks of students in their courses."}), 403
+
+        # Now requesting_user_email is defined before this log
+        logger.info(f"Marks retrieval authorized for user {user_id_str} by {requesting_user_email} ({requesting_user_role}).")
+        
+        # Call the logic function which returns (data, status_code)
+        result_data, status_code = marks.get_specific_user_marks_logic(user_id_str)
+        
+        # Check if the result_data indicates an error from the logic function itself
+        if isinstance(result_data, dict) and "error" in result_data:
+            return jsonify(result_data), status_code
+            
+        return jsonify(result_data), status_code
+
+    except bson.errors.InvalidId:
+        logger.error(f"Invalid user ID format '{user_id_str}' for getting marks route processing.")
         return jsonify({"msg": "Invalid user ID format in URL"}), 400
     except Exception as e:
-        logger.error(f"Unexpected error during authorization or getting user marks for {user_id_str}: {e}", exc_info=True)
-        return jsonify({"msg": "Server error during authorization or marks retrieval"}), 500
+        logger.error(f"Unexpected error in get_marks_for_specific_user route for {user_id_str}: {e}", exc_info=True)
+        return jsonify({"msg": "Server error during authorization or marks retrieval"}), 500 # This 
+    
+
+@app.route('/marks/user/<user_id_str>/course/<course_id_str>', methods=['GET']) # <<< --- NEW GET ENDPOINT
+@jwt_required()
+def get_user_course_marks(user_id_str, course_id_str):
+    """
+    Endpoint to get the marks for a specific user in a specific course.
+    """
+    claims = get_jwt()
+    requesting_user_email = get_jwt_identity()
+    requesting_user_role = claims.get('role')
+
+    try:
+        actor_user_doc = users_collection.find_one({"email": requesting_user_email})
+        if not actor_user_doc:
+            logger.warning(f"Marks retrieval attempt by non-existent user (email from token): {requesting_user_email}")
+            return jsonify({"msg": "Authenticated user not found"}), 403
+        
+        actor_user_id_str = str(actor_user_doc['_id'])
+
+        # Authorization: Student can only see their own. Admin/Company might have broader access.
+        if requesting_user_role == 'student':
+            if actor_user_id_str != user_id_str:
+                logger.warning(f"Auth fail: Student {requesting_user_email} (ID: {actor_user_id_str}) tried to access marks for different user {user_id_str}")
+                return jsonify({"msg": "Unauthorized: You can only view your own marks."}), 403
+        elif requesting_user_role not in ['admin', 'company']: # Or other roles that should have access
+             logger.warning(f"Auth fail: Role {requesting_user_role} ({requesting_user_email}) tried to get marks for user {user_id_str}, course {course_id_str}")
+             return jsonify({"msg": "Unauthorized role to view these marks."}), 403
+        
+        # If role is 'company', you might add further checks:
+        # e.g., is the course_id_str one of the company's courses?
+        # if requesting_user_role == 'company':
+        #     requesting_company_name = claims.get('company_name')
+        #     course_doc = courses_collection.find_one({"_id": ObjectId(course_id_str), "company_name": requesting_company_name})
+        #     if not course_doc:
+        #         logger.warning(f"Auth fail: Company {requesting_company_name} tried to access marks for course {course_id_str} not owned by them.")
+        #         return jsonify({"msg": "Unauthorized: Company can only view marks for their own courses."}), 403
+
+
+        logger.info(f"Marks retrieval authorized for user {user_id_str}, course {course_id_str} by {requesting_user_email} ({requesting_user_role}).")
+        
+        result_data, status_code = marks.get_specific_user_course_marks_logic(user_id_str, course_id_str)
+        
+        # The logic function returns the document directly or an error dict
+        return jsonify(result_data), status_code
+
+    except bson.errors.InvalidId:
+        logger.error(f"Invalid ID format for user_id '{user_id_str}' or course_id '{course_id_str}' in GET marks route.")
+        return jsonify({"msg": "Invalid user or course ID format in URL"}), 400
+    except Exception as e:
+        logger.error(f"Unexpected error in get_user_course_marks route for user {user_id_str}, course {course_id_str}: {e}", exc_info=True)
+        return jsonify({"msg": "Server error during marks retrieval"}), 500
 
 
 @app.route('/marks/all', methods=['GET']) # Changed route for clarity

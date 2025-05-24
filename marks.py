@@ -203,6 +203,8 @@ def get_specific_user_marks_logic(user_id_str: str):
         if isinstance(e, bson.errors.InvalidId): # Specific check
              return {"error": "Invalid user ID format.", "detail": str(e)}, 400
         return {"error": "Error fetching user marks", "detail": str(e)}, 500
+    
+    
 
 
 def get_all_students_marks_logic():
@@ -232,3 +234,50 @@ def get_all_students_marks_logic():
     except Exception as e:
         logger.error(f"Error fetching all students marks: {e}", exc_info=True)
         return {"error": "Error fetching all marks", "detail": str(e)}, 500
+    
+
+def get_specific_user_course_marks_logic(user_id_str: str, course_id_str: str):
+    """
+    Retrieves the marks record for a specific user in a specific course.
+    Raises bson.errors.InvalidId if IDs are malformed.
+    Returns a tuple: (marks_document_dict_or_error_dict, http_status_code)
+    """
+    if marks_collection is None: # Check specifically against None
+        logger.error("Marks collection is not initialized for get_specific_user_course_marks_logic.")
+        return {"error": "Server configuration error", "detail": "Marks collection not available."}, 500
+
+    # These will raise bson.errors.InvalidId if strings are malformed,
+    # which will be caught by app2.py
+    user_object_id = ObjectId(user_id_str)
+    course_object_id = ObjectId(course_id_str)
+
+    try:
+        marks_document = marks_collection.find_one({
+            "user_id": user_object_id,
+            "course_id": course_object_id
+        })
+
+        if not marks_document:
+            logger.warning(f"No marks found for user_id: {user_id_str} and course_id: {course_id_str}")
+            return {"error": "Marks not found", "detail": "No marks record found for this user and course combination."}, 404
+
+        # Prepare document for JSON response
+        marks_document['_id'] = str(marks_document['_id'])
+        if isinstance(marks_document.get('user_id'), ObjectId):
+            marks_document['user_id'] = str(marks_document['user_id'])
+        if isinstance(marks_document.get('course_id'), ObjectId):
+            marks_document['course_id'] = str(marks_document['course_id'])
+        if 'calculation_timestamp' in marks_document and isinstance(marks_document['calculation_timestamp'], datetime):
+            marks_document['calculation_timestamp'] = marks_document['calculation_timestamp'].isoformat()
+        
+        logger.info(f"Successfully retrieved marks for user {user_id_str}, course {course_id_str}.")
+        return marks_document, 200
+        
+    except pymongo_errors.PyMongoError as e:
+        logger.error(f"Database error fetching marks for user {user_id_str}, course {course_id_str}: {e}")
+        return {"error": "Database error fetching marks", "detail": str(e)}, 500
+    except Exception as e:
+        logger.error(f"Error fetching marks for user {user_id_str}, course {course_id_str}: {e}", exc_info=True)
+        if isinstance(e, bson.errors.InvalidId): # Should be caught by app2.py primarily
+             return {"error": "Invalid ID format.", "detail": str(e)}, 400
+        return {"error": "Error fetching specific user-course marks", "detail": str(e)}, 500
