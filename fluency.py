@@ -5,10 +5,8 @@ from bson.objectid import ObjectId
 from datetime import datetime
 import logging
 
-# Import database collections from auth_utils.py
 from auth_utils import fluency_test_collection, courses_collection
 
-# Configure logging
 logger = logging.getLogger(__name__)
 
 
